@@ -1,15 +1,16 @@
 // @ts-ignore
 import input from "input";
 import { Api, sessions, TelegramClient } from "telegram-gifts";
+import express from "express";
+import cors from "cors";
+
 import { env } from "./env.js";
 
 import StarGift = Api.StarGift;
 import StarGifts = Api.payments.StarGifts;
 import GetStarGifts = Api.payments.GetStarGifts;
-import GetPaymentForm = Api.payments.GetPaymentForm;
-import SendStarsForm = Api.payments.SendStarsForm;
 
-const stringSession = new sessions.StringSession(env.API_SESSION);
+const stringSession = new sessions.StringSession(env.API_SESSION || "");
 
 const client = new TelegramClient(stringSession, Number(env.API_ID), env.API_HASH, {
   connectionRetries: 5,
@@ -17,74 +18,83 @@ const client = new TelegramClient(stringSession, Number(env.API_ID), env.API_HAS
 
 await client
   .start({
-    phoneNumber: async () => await input.text("Phone number"),
-    password: async () => await input.text("2FA password"),
-    phoneCode: async () => await input.text("📩 Telegram code: "),
-    onError: (err) => console.error("Telegram error:", err),
+    phoneNumber: async () => env.PHONE_NUMBER,
+    password: async () => "",
+    phoneCode: async () => await input.text("Telegram code:"),
+    onError: (err) => {
+      console.error("Telegram error:", err);
+      process.exit(0);
+    },
   })
   .then(() => {
     if (!env.API_SESSION) {
-      console.log("📄 Session:(save it to .env file API_SESSION=XXX)", client.session.save());
+      console.log(client.session.save());
     }
   });
 
-while (true) {
-  const starGifts = (await client.invoke(new GetStarGifts({ hash: 0 }))) as StarGifts;
+const app = express();
 
-  const gifts = starGifts.gifts as StarGift[];
+interface Status {
+  new_gifts: { id: string; supply: string; price: string }[];
+  status: string;
+  error: null | string;
+}
 
-  const limitedGifts = gifts.filter((gift) => {
-    return gift.limited;
-  });
+let status: Status = {
+  new_gifts: [],
+  status: "ok",
+  error: null,
+};
 
-  const sortedLimitedGifts = limitedGifts.sort(
-    (a, b) => b.stars.toJSNumber() - a.stars.toJSNumber(),
-  );
+app.get("/status", cors(), async (req, res) => {
+  res.status(200).json(status);
+});
 
-  const notSoldOut = sortedLimitedGifts.filter(
-    (gift) => gift.className === "StarGift" && !gift.soldOut,
-  );
+app.listen(3001, () => {
+  console.log("server listening on port 3001");
+});
 
-  if (notSoldOut.length) {
-    console.log("ALERT: new gifts");
-  }
+async function monitor() {
+  try {
+    const starGifts = (await client.invoke(new GetStarGifts({ hash: 0 }))) as StarGifts;
+    const gifts = starGifts.gifts as StarGift[];
 
-  if (!notSoldOut.length) {
-    console.log("new gifts not found");
-    await new Promise((f) => setTimeout(f, 500));
-    continue;
-  }
-
-  for (const gift of notSoldOut) {
-    if (env.MAXIMUM_PRICE && env.MAXIMUM_PRICE < gift.stars.toJSNumber()) {
-      continue;
-    }
-    if (env.MAXIMUM_SUPPLY < (gift.availabilityTotal || Infinity)) {
-      continue;
-    }
-
-    const invoice = new Api.InputInvoiceStarGift({
-      peer: new Api.InputPeerSelf(),
-      giftId: gift.id,
-      hideName: true,
-      message: new Api.TextWithEntities({
-        text: "@giftsatellite", // Текст комментария
-        entities: [],
-      }),
+    const limitedGifts = gifts.filter((gift) => {
+      return gift.limited;
     });
 
-    const paymentForm = await client.invoke(new GetPaymentForm({ invoice }));
+    const sortedLimitedGifts = limitedGifts.sort(
+      (a, b) => b.stars.toJSNumber() - a.stars.toJSNumber(),
+    );
 
-    if (
-      paymentForm.invoice.className === "Invoice" &&
-      paymentForm.invoice.prices.length === 1 &&
-      paymentForm.invoice.prices[0].amount.toJSNumber() === gift.stars.toJSNumber()
-    ) {
-      try {
-        await client.invoke(new SendStarsForm({ invoice, formId: paymentForm.formId }));
-      } catch (err) {
-        console.log(err);
-      }
+    const notSoldOut = sortedLimitedGifts.filter(
+      (gift) => gift.className === "StarGift" && !gift.soldOut,
+    );
+
+    if (notSoldOut.length) {
+      status = {
+        new_gifts: notSoldOut.map((item) => ({
+          id: item.id.toString(),
+          supply: (item.availabilityTotal || 0).toString(),
+          price: item.stars.toString(),
+        })),
+        status: "ok",
+        error: null,
+      };
     }
+  } catch (error) {
+    let errorMessage = "Неопознанная ошибка";
+    console.log(error);
+    try {
+      errorMessage = JSON.stringify(error);
+    } catch {}
+    status = {
+      new_gifts: status.new_gifts,
+      status: "error",
+      error: errorMessage,
+    };
   }
+  setTimeout(() => monitor(), 250);
 }
+
+monitor();
