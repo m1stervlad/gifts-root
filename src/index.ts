@@ -73,18 +73,16 @@ async function monitor() {
       (gift) => gift.className === "StarGift" && !gift.soldOut,
     );
 
-    if (notSoldOut.length) {
-      status = {
-        new_gifts: notSoldOut.map((item) => ({
-          id: item.id.toString(),
-          supply: (item.availabilityTotal || 0).toString(),
-          price: item.stars.toString(),
-        })),
-        status: "ok",
-        error: null,
-        lastUpdate: Date.now(),
-      };
-    }
+    status = {
+      new_gifts: notSoldOut.map((item) => ({
+        id: item.id.toString(),
+        supply: (item.availabilityTotal || 0).toString(),
+        price: item.stars.toString(),
+      })),
+      status: "ok",
+      error: null,
+      lastUpdate: Date.now(),
+    };
   } catch (error) {
     let errorMessage = "Неопознанная ошибка";
     console.log(error);
