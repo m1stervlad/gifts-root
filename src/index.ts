@@ -38,12 +38,14 @@ interface Status {
   new_gifts: { id: string; supply: string; price: string }[];
   status: string;
   error: null | string;
+  lastUpdate: number;
 }
 
 let status: Status = {
   new_gifts: [],
   status: "ok",
   error: null,
+  lastUpdate: Date.now(),
 };
 
 app.get("/status", cors(), async (req, res) => {
@@ -80,6 +82,7 @@ async function monitor() {
         })),
         status: "ok",
         error: null,
+        lastUpdate: Date.now(),
       };
     }
   } catch (error) {
@@ -92,6 +95,7 @@ async function monitor() {
       new_gifts: status.new_gifts,
       status: "error",
       error: errorMessage,
+      lastUpdate: Date.now(),
     };
   }
   setTimeout(() => monitor(), 250);
