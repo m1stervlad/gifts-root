@@ -34,13 +34,18 @@ await client
 
 const app = express();
 
+interface NewGift {
+  id: string;
+  supply: number;
+  price: number;
+}
+
 interface Status {
-  new_gifts: { id: string; supply: string; price: string }[];
+  new_gifts: NewGift[];
   status: string;
   error: null | string;
   lastUpdate: number;
 }
-
 let status: Status = {
   new_gifts: [],
   status: "ok",
@@ -76,8 +81,8 @@ async function monitor() {
     status = {
       new_gifts: notSoldOut.map((item) => ({
         id: item.id.toString(),
-        supply: (item.availabilityTotal || 0).toString(),
-        price: item.stars.toString(),
+        supply: item.availabilityTotal!,
+        price: item.stars.toJSNumber(),
       })),
       status: "ok",
       error: null,
