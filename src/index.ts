@@ -67,11 +67,11 @@ async function monitor() {
     const gifts = starGifts.gifts as StarGift[];
 
     const limitedGifts = gifts.filter((gift) => {
-      return !gift.limited;
+      return gift.limited;
     });
 
     const sortedLimitedGifts = limitedGifts.sort(
-      (a, b) => a.stars.toJSNumber() - b.stars.toJSNumber(),
+      (a, b) => b.stars.toJSNumber() - a.stars.toJSNumber(),
     );
 
     const notSoldOut = sortedLimitedGifts.filter(
@@ -79,9 +79,9 @@ async function monitor() {
     );
 
     status = {
-      new_gifts: notSoldOut.map((item, index) => ({
+      new_gifts: notSoldOut.map((item) => ({
         id: item.id.toString(),
-        supply: index === 0 ? 5000 : 500000,
+        supply: item.availabilityTotal!,
         price: item.stars.toJSNumber(),
       })),
       status: "ok",
